@@ -1,6 +1,6 @@
 # NoSQL
 
-##CAP Theorem
+## CAP Theorem
 > **C**onsistency 
 >
 > **A**vailability
