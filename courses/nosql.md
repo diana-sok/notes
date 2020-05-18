@@ -8,4 +8,3 @@ States no distributed system can strongly support more than 2 of the three
 > **A**vailability - all non-failing nodes can be written/read from
 >
 > **P**artition Tolerance - system will function in spite of network partition
-
