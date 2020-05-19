@@ -3,6 +3,15 @@
 
 question at (3, 17) (3, 25)
 
+quick defs:
+> serializeability : garuntees concurrent transactions behave the same as if
+> they were executed serially, requires highest concurrency control but means
+> slow application due to locks
+>
+>linearizeability: about replicated data, system appears as a single node in
+> which operations on it
+> are atomic
+
 *Part 1*
 ## Why?
 * More suitable to solve a different set of problems relational systems solve
@@ -275,3 +284,76 @@ Allows application to select which member of replica set it wishes to read from
 > - read data cannot be rolled back
 > - ensures data is most recent by blocking read until last write is
 > replicated (super slow)
+
+*Part 4*
+## Sharding
+* splitting up large collection across multiple independent srevers  to
+ improve performance
+* collection level, not DB levelYou must explicitly tell both the database and collection that you want them to be
+distributed.
+* Sharding database is always prerequisite to sharding one of its collections
+* there must be an index built on the shard key if existing collection
+* if new collection, index on shard key is automatically made
+
+> db.enableSharding("music"")
+> sh.shardCollection("music.artists", {"name": 1})
+
+> ascending key:
+> - key that steadily increases over time --> all writes/new docs fo to max
+> chunk (chunk containing maxKey) --> only max chunk grows and splits
+> --> difficult for mongodb to keep chunks evenly balanced
+>
+> randomly distributed:
+> - keys with no identifiable pattern (usernames, emails)
+> - writes are randomly distributed --> shards grow at roughly same rate 
+>
+> location based:
+> - group data based on similarity (not necessarily geographic)
+>
+Strategies;
+> range based:
+> - splits collection based on shard key value
+> - each chunk is assigned a range value based on shard keys
+> - range of shard keys whose values are close are more likely to resideon
+> the same chunk or shard --> efficient queries
+> - con:
+>   - read and write performance may decrease with poor shard key choice
+> - good for shard keys with the following traits:
+> - > large key cardinality 
+> - > low shard key frequency
+> - > non monotonically changing shard keys
+> - cardinality of shard keys determines the max number of chunks balancer
+> can create --> if the number is small, we can add more shards but they
+> wont provide benefit
+> - frequency: how often given value occurs in data --> if majority of
+> documents contain those values, the chunks storing those docs will become
+> a bottleneck --> as chunks grow, may become indivisible
+>
+> hash-based:
+> - sharding determines hash values based on field values in shard key
+> - each chunk is then assigned a range based on the hashed shard key values
+> - cannot use unique option, cannot use array fields as shard key, floats
+> rounded to int
+> - pros:
+>   - loads data asap
+>   - more even data distribution (especially for datasets with ascending
+> shard keys)
+> - cons:
+>   - never do a targeted range query
+>
+> tag aware:
+> - tags specific ranges of shard key and associates those tags with  a
+> shard or subset of shards
+>
+
+*Part 4*
+
+## Idexes
+* data struvture collecting information about values of specified fields
+ (index keys) in the document of a collection
+* index as a predefined query that was executed and had results stored
+* adding index can potentially increase query speed, but reduces insertion
+/deletion speed
+* good when reads is higher than writes
+* default index is on the _id field --> unique such that clients cannot
+ insert two documents with same _id, cannot drop _id index
