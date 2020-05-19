@@ -1,5 +1,8 @@
 # NoSQL 
 *Notes on 157c taught by S Kim*
+
+question at (3, 17) (3, 25)
+
 *Part 1*
 ## Why?
 * More suitable to solve a different set of problems relational systems solve
@@ -149,3 +152,126 @@ In relation to transactions
  the record changes 
     * good for single server or master slave replication (single authority
      over data)
+
+*Part 3*
+## Replication in MongoDB
+Way of keeping identical copies of data on multiple servers
+> replica set - group of servers with one primary and multiple secondaries
+>
+> primary - source of truth at given moment for the replica set
+> - only server that can be written to
+>
+> secondary - data carrying non primary that replicates data from other
+> members via replication chaining as fast as possible
+> - can be read from specifying read preference
+>
+
+#### OPLOG
+* capped collection
+* how replication is handled: each S contains copies of all DBs and replays OP
+* if S is too far behind P (in event of down time or more writes than it can
+ handle), S will become stale
+* stale S cannot catch up to every op as it would be skipping some ops
+* stale S solution: attempt to replicate from each member of the set in turn
+ to find an OPLOG long enough to replicate --> if failure, fully sync from
+  recent backup
+  
+#### Member Configuration Options
+> Arbiters
+> - non data bearing
+> - only used when we have even number of nodes to break tie in election
+> - always opt for data bearing node when possible
+>
+> Priority
+> - indicates how strongly the member wants to be P
+> - range: 0-100
+> - 1 - default
+> - 0 - will never be a P (Passive Secondaries > Hidden Secondaries
+>  Delayed Secondaries) (Part 3, Slide 18)
+> - highest priority is always elected as P, if highest priority is stale, it
+> - catches up with the rest of the set and becomes P
+>
+> Hidden
+> - maintains copy of primary's data but is invisible to client
+> - no traffic (other than for replication)
+> - used for deidated tasks: reporting, backing up
+> - never can be a P
+> - can vote in elections
+>
+> Slave Delay
+> - S that delays applying operations a specified number of seconds behind P
+> - used to restore DB corruption caused by human error
+> - delay must be smaller than capacity of OPLOG --> WHY?!?!??! (3, 17)
+>
+
+## Replica Set Elections
+* Election occurs when no primary:
+    * initiating a new replica set
+    * adding a new node to replica set
+    * S loses contact with P
+    * P steps down
+        * forcefully with replSetStepDown
+        * if a S is eligible for election and has higher priority
+        * if it cannot contact majority (based on configuration, no care as
+         to whether of not node is up or down) of member in replica set
+* Process: 
+    * (When there is no P, any eligible member can seek election)
+    * member seeking an election will send out notice to all reachable
+     (to it) members
+    * S must be unanimously elected (if a single node vetoes -> election is
+     canceled)
+        * S will be vetoed if:
+            * S is not up to date
+            * S has lower priority than another member eligible for election
+  
+* Only one P per replica set
+* If P is unavailable, election to find new P is held
+* Fail over time - time P is down and thus replica set cannot accept writes
+* heartbeat allows P to now if it can reach majority of set
+* heartbeat is sent every 2 seconds, if no response in 10, the node is
+ marked inaccessible
+* majority is enforced to elect P to avoid more than one primary in case of
+ network partition (split brain problem?) (3, 25)
+ 
+## Rollback
+* P1 does a successful write and P1 goes down before S's have a chance to
+ replicate it --> next elected P (P2) may not have the write
+* P2 resurrects and cannot find a sync source --> must roll back by undoing
+ ops that were not replicated before fail over
+* Undone ops are written to special rollback files that must be applied to
+ current P --> write disappears until admin manually applies rollback file
+  to current P
+* Prevent by writing to majority --> newly elected P must then have a copy
+ of that write to be elected
+ 
+## Write Concern
+* how many nodes these data need to have been safely committed to before it
+ is considered to be complete
+* allows us to express how concerned we are with the durability of a
+ particular write in a replica set
+* can be set for individual operations or collections
+* Write:
+    * 1. MongoDB applies write to P
+    * 2. MongoDB records the operations to P's OPLOG
+    * 3. S members replicate OPLOG and apply ops to their data sets
+> w:majority
+> - will not rollback
+>
+
+## ReadPreference (where are we reading?)
+Allows application to select which member of replica set it wishes to read from
+
+## ReadConcern (what are we reading?)
+* Read:
+    * all members in replica set can accept a read, but P is default to
+     guarantee latest version of document --> bad for throughput
+> r:local
+> - returns INSTANCES'S most recent data
+> r: majority
+> - read data cannot be rolled back
+> - returns data replicated to majority of nodes this particular node knows
+> about
+> r: linearizable
+> - read data cannot be rolled back
+> - ensures data is most recent by blocking read until last write is
+> replicated (super slow)
